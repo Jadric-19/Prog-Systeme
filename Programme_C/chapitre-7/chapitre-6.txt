@@ -1,0 +1,479 @@
+
+
+
+
+*************************************************************************
+
+----------------------------  CHAPITRE-7 --------------------------------
+
+**********************************************************************
+
+
+_________________________________________________________________________________________
+
+EXO-1
+_________________________________________________________________________________________
+
+Ecrire un programme qui crée un fils qui fait un calcul sans fin. Le processus
+père propose alors un menu :
+• Lorsque l’utilisateur appuie sur la touche 's', le processus père endort son fils.
+• Lorsque l’utilisateur appuie sur la touche 'r', le processus père redémare son fils.
+• Lorsque l’utili*/
+
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <setjmp.h>
+
+void gestionnaire(int numero)
+{
+     switch(numero)
+     {
+        case SIGUSR1:
+             printf("\n---------- REDEMMARAGE DU FILS ---------\n") ;
+             
+             break ;
+        case SIGUSR2:
+             printf("\n---------- FILS ENDORMIE------------\n") ;
+             pause() ;
+             break ;
+     }   
+}
+
+int main()
+{
+   
+    pid_t pid ;
+    char rep ;
+
+    
+    
+    pid = fork() ;
+
+    if( pid == -1 )
+     {
+        printf("\n---------- ERREUR : FORK()-------------------\n") ;
+        exit(0) ;
+     }
+
+    if( pid == 0 )
+     {
+         struct sigaction action ;
+         action.sa_handler = gestionnaire ;
+         sigemptyset(&action.sa_mask);
+         action.sa_flags = 0 ;
+         if(sigaction(SIGUSR1 , &action , NULL) != 0  || sigaction(SIGUSR2 , &action , NULL) != 0)
+          {
+              printf("\n-------ERREUR : SIGNAL-------------\n") ;
+              exit(0) ;
+          }
+         int i = 1 , j = 0  ;
+         while(i)
+           {
+                printf("\n---- %d ----\n" , j++) ;
+                sleep(2) ;
+           }
+     }
+    else if( pid > 0 )
+     {
+        while(1)
+         {
+            printf("\n==> (s) pour endormir le fils , (r) pour le redemmer , (q) pour le tuer : ") ;
+            scanf(" %c" , &rep) ;
+
+            if(rep == 's')
+            {
+                 kill(pid , SIGUSR2) ;
+            }
+            else if(rep == 'r')
+             {
+                 kill(pid , SIGUSR1) ;
+             }
+            else if(rep == 'q')
+            {
+                 kill(pid , SIGKILL) ;
+                 break ;
+                 //return 1 ;
+            }
+            else
+            {
+                 printf("\n--- SIGNAL NON REPERTORIER ----\n") ;
+            }
+       }
+    }
+    
+    return 0 ;
+
+}
+
+
+_________________________________________________________________________________________
+
+EXO-2
+_________________________________________________________________________________________
+
+
+
+Ecrire un programme saisit.c qui saisit un int au clavier, et l’enregistre
+dans un fichier /tmp/entier.txt. Écrire un programme affiche.c qui attend (avec sleep) un
+signal utilisateur du programme saisit.c. Lorsque l’entier a été saisi, le programme affiche.c
+affiche la valeur de l’entier.*/
+
+
+****Programme affiche****
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+
+int signal_recu = 0;
+
+void gestionnaire(int sig) 
+{
+    signal_recu = 1;  
+}
+
+int main() 
+{
+   
+    struct sigaction sa;
+    sa.sa_handler = gestionnaire;
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+
+    if (sigaction(SIGUSR1, &sa, NULL) == -1) 
+     {
+        perror("sigaction");
+        return 1;
+     }
+
+    printf("PID du processus affiche : %d\n", getpid());
+    printf("En attente du signal...\n");
+
+
+    while (!signal_recu) 
+     {
+        sleep(1);
+     }
+
+   
+    FILE *fichier = fopen("/tmp/entier.txt", "r");
+
+    if (!fichier) 
+     {
+        perror("fopen() : ");
+        return 1;
+     }
+
+    int entier = 0 ;
+    if (fscanf(fichier, "%d", &entier) != 1) 
+     {
+        printf("\n-----Erreur lecture entier----\n");
+        fclose(fichier);
+        return 1;
+     }
+
+    fclose(fichier);
+
+    printf("Entier reçu : %d\n", entier);
+    return 0;
+}
+
+
+***Programme saisi****
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[])
+{
+    if (argc != 2) 
+     {
+        fprintf(stderr, "Usage: %s <PID_affiche>\n", argv[0]);
+        return 1;
+     }
+
+    pid_t pid_affiche = atoi(argv[1]);
+    int entier = 0 ;
+
+    printf("Saisir un entier : ");
+    scanf("%d", &entier);
+
+   
+    FILE *fichier = fopen("/tmp/entier.txt", "w");
+
+    if (!fichier) 
+     {
+        perror("fopen");
+        return 1;
+     }
+
+    fprintf(fichier, "%d\n", entier);
+    fclose(fichier);
+
+    if (kill(pid_affiche, SIGUSR1) == -1) 
+    {
+        perror("kill() :");
+        return 1;
+    }
+
+    printf("Signal envoye au processus %d\n", pid_affiche);
+    return 0;
+}
+
+
+_________________________________________________________________________________________
+
+EXO-3
+_________________________________________________________________________________________
+
+
+Écrire un programme qui crée 5 processus fils qui font une boucle while
+1. Le processus père proposera dans une boucle sans fin un menu à l’utilisateur :
+• Endormir un fils ;
+• Réveiller un fils ;
+• Terminer un fils ;*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/types.h>
+
+#define N 5
+
+pid_t pids[N];  // tableau pour stocker les PID des fils
+
+//Gestionnaire fils
+void gestionnaire_fils(int sig) 
+{
+    switch(sig) 
+    {
+        case SIGUSR1 :
+            printf("Fils %d: je suis réveillé !\n", getpid()) ;
+            break ;
+        case SIGUSR2 :
+            printf("Fils %d: je m'endors...\n", getpid());
+            pause() ;  // attends un signal pour se réveiller
+            break ;
+        case SIGTERM :
+            printf("Fils %d: je suis tué !\n", getpid());
+            exit(0) ;
+    }
+}
+
+//Gestionnaire  pere
+void gestionnaire_pere(int sig) 
+{
+    if(sig == SIGTERM) 
+    {
+        printf("Père %d: je suis tué !\n", getpid()) ;
+        exit(0) ;
+    }
+}
+
+// Creation de fils leurs PID dans pids[] 
+void creer_fils() 
+{
+    int i = 0 ;
+    pid_t pid ;
+    for( i = 0; i < N; i++) 
+    {
+        pid = fork();
+        if(pid < 0) 
+         {
+            perror("fork");
+            exit(1);
+         }
+        if(pid == 0) 
+         {
+       
+            struct sigaction fils_action ;
+            fils_action.sa_handler = gestionnaire_fils ;
+            sigemptyset(&fils_action.sa_mask);
+            fils_action.sa_flags = 0;
+            sigaction(SIGUSR1 , &fils_action , NULL);
+            sigaction(SIGUSR2 , &fils_action  , NULL);
+            sigaction(SIGTERM , &fils_action , NULL);
+
+            int j = 0;
+            while(1) 
+             {
+                printf("Fils %d: boucle %d\n", getpid(), j++);
+                fflush(stdout);
+                sleep(2);
+             }
+            exit(0);
+         }
+        else 
+        {   
+            pids[i] = pid ;
+        }
+    }
+}
+
+
+int menu() 
+{
+    int choix ;
+    printf("\n -------------MENU :-------------\n");
+    printf("1 - Endormir un fils \n") ;
+    printf("2 - Réveiller un fils \n") ;
+    printf("3 - Terminer un fils \n") ;
+    printf("4 - Terminer le père \n") ;
+    printf("==>Votre choix: ") ;
+    scanf("%d", &choix) ;
+    return choix;
+}
+
+
+void traiter_choix(int choix) 
+{
+    int fils_num ;
+    if(choix >= 1 && choix <= 3) 
+    {
+        printf("Numéro du fils (1-%d): ", N);
+        scanf("%d", &fils_num);
+        if(fils_num < 1 || fils_num > N) 
+        {
+            printf("Fils invalide !\n");
+            return;
+        }
+    }
+
+    switch(choix) 
+    {
+        case 1:  
+            kill(pids[fils_num - 1], SIGUSR2);
+            break;
+        case 2:  
+            kill(pids[fils_num - 1], SIGUSR1);
+            break;
+        case 3:  
+            kill(pids[fils_num - 1], SIGTERM);
+            break;
+        case 4:  
+            kill(getpid(), SIGTERM);
+            exit(0) ;
+            break;
+        default:
+            printf("Choix invalide !\n");
+    }
+}
+
+
+int main() 
+{
+    
+    struct sigaction sa_pere;
+    sa_pere.sa_handler = gestionnaire_pere;
+    sigemptyset(&sa_pere.sa_mask);
+    sa_pere.sa_flags = 0;
+    sigaction(SIGTERM, &sa_pere, NULL);
+
+    // Creation des fils
+    creer_fils();
+
+    // Boucle menu pere
+    while(1) 
+    {
+        int choix = menu();
+        traiter_choix(choix);
+    }
+
+    return 0;
+}
+
+
+_________________________________________________________________________________________
+
+EXO-4
+_________________________________________________________________________________________
+
+Ecrire un programme qui saisit les valeurs d’un tableau d’entier tab de n
+éléments alloué dynamiquement. L’entier n sera saisi au clavier. Le programme affiche la valeur
+d’un élément tab[i] où i est saisi au clavier. En cas d’erreur de segmentation le programme
+fait resaisir la valeur de i avant de l’afficher.*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <setjmp.h>
+#define TRUE 1
+
+sigjmp_buf env;
+
+int i = 0  , erreur = 0 ;
+void gestionnaire(int sig) 
+{
+    if(sig == SIGSEGV)
+     {
+        printf("Erreur : indice invalide ! Veuillez resaisir un indice correct.\n");
+        erreur = 1 ;
+        siglongjmp(env, 1) ;
+     }
+} 
+
+int main() 
+{
+    int n;
+    int *tab;
+
+    struct sigaction action ;
+
+    action.sa_handler = gestionnaire; 
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0 ;
+
+    if (sigaction(SIGSEGV, &action, NULL) != 0)
+    {
+        fprintf(stderr, "Erreur sigaction\n");
+        exit(1);
+    }
+
+    printf("Saisir le nombre d'elements du tableau: ");
+    scanf("%d", &n);
+
+    tab = malloc(sizeof(int) * n);
+    if (!tab) 
+    {
+        perror("Erreur allocation");
+        return 1;
+    }
+
+    for ( i = 0 ; i < n; i++) 
+    {
+        printf("tab[%d] = ", i);
+        scanf("%d", &tab[i]);
+    }
+
+    i = 0 ;
+
+    while (TRUE) 
+    {
+        if (sigsetjmp(env , 1) == 0 || erreur ) 
+        {
+            if(erreur)
+               erreur = 0 ;
+          
+            printf("Saisir l'indice de l'element a afficher: ");
+            scanf("%d", &i);   
+             
+        }
+        printf("tab[%d] = %d\n", i , tab[i]);
+        break; 
+    }
+
+    free(tab);
+    return 0;
+}
+
+
+
+
+*************************************************************************

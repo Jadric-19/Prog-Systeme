@@ -1,0 +1,231 @@
+
+
+*************************************************************************
+
+----------------------------  CHAPITRE-3 ----------------------------------
+
+**********************************************************************
+
+
+_________________________________________________________________________________________
+
+EXO-1
+_________________________________________________________________________________________
+
+Écrire un programme qui prend deux arguments en ligne de commande en
+supposant qu ce sont des nombres entiers, et qui affiche l’addition de ces deux nombres.*/
+
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char *argv[])
+{
+    if (argc != 3)
+    {
+        printf("Usage : %s nombre1 nombre2\n", argv[0]);
+        return 1;
+    }
+
+    int a = atoi(argv[1]);
+    int b = atoi(argv[2]);
+
+    int somme = a + b;
+
+    printf("La somme de %d et %d est : %d\n", a, b, somme);
+
+    return 0;
+}
+
+
+_________________________________________________________________________________________
+
+EXO-2
+_________________________________________________________________________________________
+
+
+
+Ecrire un programme qui prend en argument un chemin vers un répertoire
+R, et copie le répertoire courant dans ce répertoire R. */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define TAILLE 256
+
+int main(int argc, char *argv[])
+{
+    if (argc != 2)
+    {
+        printf("Usage : %s <repertoire_destination>\n", argv[0]);
+        return 1;
+    }
+
+    char commande[TAILLE] = "cp -r . ";
+
+    strcat(commande, argv[1]); 
+
+    system(commande);
+
+    printf("Copie terminee !\n");
+
+    return 0;
+}
+
+
+_________________________________________________________________________________________
+
+EXO-3
+_________________________________________________________________________________________
+
+
+
+Ecrire un programme qui saisit un nom de fichier texte au clavier et ouvre ce
+fichier dans l’éditeur emacs, dont le fichier exécutable se trouve à l’emplacement /usr/bin/emacs.*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main()
+{
+    char nom_fichier[256];
+    char commande[512];
+
+    printf("Entrez le nom du fichier : ");
+    fgets(nom_fichier, sizeof(nom_fichier), stdin);
+
+    nom_fichier[strcspn(nom_fichier, "\n")] = '\0';
+
+    strcpy(commande, "/usr/bin/emacs \"");
+    strcat(commande, nom_fichier);
+    strcat(commande, "\"");
+
+    system(commande);
+
+    return 0;
+}
+
+_________________________________________________________________________________________
+
+EXO-4
+_________________________________________________________________________________________
+
+Ecrire un programme qui saisit des noms de répertoires au clavier et copie
+le répertoire courant dans tous ces répertoires. Le programme doit se poursuivre jusqu’à ce que
+l’utilisateur demande de quitter le programme.*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define TRUE 1
+
+int main()
+{
+    char rep[256];
+    char commande[512];
+    int ret = 0 ;
+
+    printf("Programme de copie du repertoire courant.\n");
+    printf("Entrez 'quit' pour quitter.\n");
+
+    while (TRUE)
+    {
+        printf("Entrez un nom de repertoire de destination : ");
+        if (!fgets(rep, sizeof(rep), stdin)) 
+        {
+            break;
+        }
+
+        rep[strcspn(rep, "\n")] = '\0';
+
+        if (strcmp(rep, "quit") == 0) 
+        {
+            printf("Fin du programme.\n");
+            break;
+        }
+
+        strcpy(commande, "cp -r . \"");
+        strcat(commande, rep);
+        strcat(commande, "\"");
+
+        ret = system(commande);
+
+        if (ret == -1) 
+        {
+            perror("Erreur lors de l'execution de system");
+        } 
+        else 
+        {
+            printf("Copie terminee dans %s\n", rep);
+        }
+    }
+
+    return 0;
+}
+
+
+_________________________________________________________________________________________
+
+EXO-5
+_________________________________________________________________________________________
+
+
+Ecrire un programme qui saisit des nom de fichiers texte au clavier et
+ouvre tous ces fichiers dans l’éditeur emacs. Le programme doit se poursuivre jusqu’à ce que
+l’utilisateur demande de quitter.*/
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define TRUE 1
+
+int main()
+{
+    char fichier[256];
+    char commande[512];
+    int ret = 0 ;
+
+    printf("Programme pour ouvrir des fichiers dans Emacs.\n");
+    printf("Entrez 'quit' pour quitter.\n");
+
+    while (TRUE)
+    {
+        printf("Entrez le nom d'un fichier texte : ");
+        if (!fgets(fichier, sizeof(fichier), stdin)) 
+        {
+            break; 
+        }
+
+
+        fichier[strcspn(fichier, "\n")] = '\0';
+
+       
+        if (strcmp(fichier, "quit") == 0) 
+        {
+            printf("Fin du programme.\n");
+            break;
+        }
+
+        strcpy(commande, "/usr/bin/emacs \"");
+        strcat(commande, fichier);
+        strcat(commande, "\"");
+
+        ret = system(commande);
+
+        if (ret == -1) 
+        {
+            perror("Erreur lors de l'execution de system");
+        } 
+        else 
+        {
+            printf("Fichier %s ouvert dans Emacs.\n", fichier);
+        }
+    }
+
+    return 0;
+}
+
+
+
+**********************************************************************

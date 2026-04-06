@@ -1,0 +1,53 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <time.h>
+
+int main() 
+{
+    pid_t pid1, pid2;
+    time_t debut, fin;
+    int temps = 0 ;
+
+
+    
+
+    debut = time(NULL); 
+
+
+    pid1 = fork();
+
+    if (pid1 == 0) 
+    {
+        srand(time(NULL) + getpid());
+        temps = rand() % 10 + 1;
+        printf("Fils 1 : je dors pendant %d secondes\n", temps);
+        sleep(temps);
+        printf("Fils 1 terminé\n");
+        exit(0);
+    }
+
+
+    pid2 = fork();
+
+    if (pid2 == 0) 
+    {
+        srand(time(NULL));
+        temps = rand() % 10 + 1;
+        printf("Fils 2 : je dors pendant %d secondes\n", temps);
+        sleep(temps);
+        printf("Fils 2 terminé\n");
+        exit(0);
+    }
+
+  
+    wait(NULL);
+    wait(NULL);
+
+    fin = time(NULL); 
+
+    printf("Durée totale : %ld secondes\n", fin - debut);
+
+    return 0;
+}

@@ -1,0 +1,422 @@
+
+
+**********************************************************************************************
+
+---------------------------------    CHAPITRE-4       --------------------------------------------------
+
+**********************************************************************************************
+
+
+EXO-1
+__________________________________________
+
+
+Écrire un programme qui crée deux processus. Le processus père
+ouvre un fichier texte en lecture. On suppose que le fichier est composé de mots formés de
+caractères alphabétiques séparés par des espaces. Le processus fils saisit un mot au clavier. Le
+processus père recherche le mot dans le fichier, et transmet au fils la valeur 1 si le mot est dans
+le fichier, et 0 sinon. Le fils affiche le résultat.*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/wait.h>
+
+#define TAILLE 100
+
+int main() 
+{
+    int pipe1[2]; // fils - pere
+    int pipe2[2]; // pere -  fils
+
+    if (pipe(pipe1) == -1 || pipe(pipe2) == -1) 
+    {
+        perror("pipe");
+        exit(1);
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) 
+    {
+        perror("fork");
+        exit(1);
+    }
+
+    if (pid == 0) 
+    { 
+        close(pipe1[0]); 
+        close(pipe2[1]); 
+
+        char mot[TAILLE];
+        printf("Entrez un mot : ");
+        fflush(stdout);
+        scanf("%s", mot);
+
+       
+        write(pipe1[1], mot, strlen(mot)+1);
+        close(pipe1[1]); 
+
+        
+        int res;
+        read(pipe2[0], &res, sizeof(int));
+        close(pipe2[0]);
+
+        if (res)
+        {
+            printf("Mot trouvé dans le fichier.\n");
+        }
+        else
+        {
+            printf("Mot non trouvé.\n");
+        }
+
+        exit(0);
+    } 
+    else 
+    {
+        close(pipe1[1]); 
+        close(pipe2[0]);
+
+        char mot_fils[TAILLE];
+        read(pipe1[0], mot_fils, TAILLE);
+        close(pipe1[0]);
+
+        FILE *f = fopen("fichier.txt", "r");
+        if (!f) 
+        {
+            perror("fichier");
+            exit(1);
+        }
+
+        char mot[TAILLE];
+        int trouve = 0;
+        while (fscanf(f, "%s", mot) == 1) 
+        {
+            if (strcmp(mot, mot_fils) == 0) 
+            {
+                trouve = 1;
+                break;
+            }
+        }
+        fclose(f);
+
+        
+        write(pipe2[1], &trouve, sizeof(int));
+        close(pipe2[1]);
+
+        wait(NULL);
+    }
+
+    return 0;
+}
+
+
+___________________________________________________________________________________
+
+
+EXO-2
+____________________________________________________________________________________
+
+
+
+Reprendre les programmes de l’exercice ??. Nous allons faire un programme
+qui fait la même chose, mais transmet les données différement. Dans le programme père, on
+liera les flots stdout et stdin à un tube*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#define MAX 256
+
+int main()
+{
+    int pipefd[2];
+    pid_t pid;
+
+    if (pipe(pipefd) == -1)
+    {
+        perror("pipe");
+        exit(1);
+    }
+
+    pid = fork() ;
+
+    if (pid < 0)
+    {
+        perror("fork");
+        exit(1);
+    }
+
+    if (pid == 0)
+    {
+
+        close(pipefd[1]); 
+
+        
+        dup2(pipefd[0], STDIN_FILENO);
+        close(pipefd[0]);
+
+        char mot[MAX];
+        
+        scanf("%s", mot);  
+
+        if (strcmp(mot, "1") == 0)
+        {
+            printf("Le mot est présent dans le fichier.\n");
+        }
+        else
+        {
+            printf("Le mot n'est pas présent dans le fichier.\n");
+        }
+
+        exit(0);
+    }
+    else
+    {
+        close(pipefd[0]); 
+
+        char mot[MAX];
+        printf("Entrez un mot à chercher : ");
+        scanf("%s", mot);
+
+       
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]);
+
+        FILE *f = fopen("fichier.txt", "r");
+        if (!f)
+        {
+            perror("fichier.txt");
+            exit(1);
+        }
+
+        char temp[MAX];
+        int trouve = 0;
+
+        while (fscanf(f, "%s", temp) != EOF)
+        {
+            if (strcmp(temp, mot) == 0)
+            {
+                trouve = 1;
+                break;
+            }
+        }
+        fclose(f);
+
+      
+        printf("%d\n", trouve);
+
+        wait(NULL);
+    }
+
+    return 0;
+}
+
+
+_________________________________________________________________________________________
+
+
+EXO-3
+__________________________________________________________________________________________
+
+
+Écrire un programme qui crée un tube, crée un processus fils,
+puis, dans le fils, lance par execv un autre programme, appelé programme fils. Le programme
+père transmets les descripteurs de tubes au programmes fils en argument, et transmet un
+message au fils par le tube. Le programme fils affiche le message.*/
+
+//FILS
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#define TAILLE 100
+
+int main(int argc, char *argv[]) 
+{
+    if (argc != 2) 
+    {
+        printf("Usage: %s <descripteur tube>\n", argv[0]);
+        return 1;
+    }
+
+    int fd = atoi(argv[1]); 
+    char buffer[TAILLE];
+
+    
+    read(fd, buffer, TAILLE);
+    close(fd);
+
+    printf("Message reçu : %s\n", buffer);
+
+    return 0;
+}
+
+
+
+//PERE
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/wait.h>
+
+int main() 
+{
+    int tube[2];
+
+    if (pipe(tube) == -1) 
+    {
+        perror("pipe");
+        exit(1);
+    }
+
+    pid_t pid = fork();
+
+    if (pid < 0) 
+    {
+        perror("fork");
+        exit(1);
+    }
+
+    if (pid == 0) 
+    { 
+       
+        close(tube[1]);
+        
+        char tube_fd[10];
+        sprintf(tube_fd, "%d", tube[0]);
+
+        char *args[] = {"./programme_fils", tube_fd, NULL};
+        execv(args[0], args);
+
+        perror("execv");
+        exit(1);
+    } 
+    else 
+    { 
+        
+        close(tube[0]);
+        
+        char message[] = "Bonjour au fils !";
+        
+        write(tube[1], message, strlen(message)+1);
+        close(tube[1]); 
+        wait(NULL); 
+    }
+
+    return 0;
+}
+
+
+_________________________________________________________________________________________
+
+EXO-4
+_________________________________________________________________________________________
+
+
+Écrire un programme qui crée un tube, crée un processus fils,
+puis, dans le fils, lance par execv un autre programme, appelé programme fils. Le programme
+père transmets les descripteurs de tubes au programmes fils en argument, et transmet un
+message au fils par le tube. Le programme fils affiche le message.mais en passant les descripteurs de tube
+comme variables d’environnement.*/
+
+//FILS
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#define TAILLE 100
+
+int main() 
+{
+    char *tube_str = getenv("TUBE_FD");
+    
+    if (!tube_str) 
+    {
+        fprintf(stderr, "Variable TUBE_FD non definie !\n");
+        return 1;
+    }
+
+    int fd = atoi(tube_str); 
+
+    char buffer[TAILLE];
+    read(fd, buffer, TAILLE); 
+    close(fd);
+
+    printf("Message recu : %s\n", buffer);
+
+    return 0;
+}
+
+//PERE
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/wait.h>
+
+int main() 
+{
+    int tube[2];
+
+    if (pipe(tube) == -1) 
+    {
+        perror("pipe");
+        exit(1);
+    }
+
+    pid_t pid = fork();
+
+    if (pid < 0) 
+    {
+        perror("fork");
+        exit(1);
+    }
+
+    if (pid == 0) 
+    { 
+        close(tube[1]);
+
+        char tube_fd[10];
+        sprintf(tube_fd, "%d", tube[0]);
+
+        char env_var[20];
+        snprintf(env_var, sizeof(env_var), "TUBE_FD=%s", tube_fd);
+
+        char *envp[] = {env_var, NULL};
+
+        char *args[] = {"./programme_fils_env", NULL} ;
+        execve(args[0], args, envp);
+
+        perror("execve"); 
+        exit(1);
+    } 
+    else 
+    { 
+        close(tube[0]); 
+
+        
+        char message[] = "Bonjour via variable d'environnement !";
+  
+        write(tube[1], message, strlen(message)+1);
+        close(tube[1]); 
+
+        wait(NULL); 
+    }
+
+    return 0;
+}
+
+
+
+*******************************************************************************************************************

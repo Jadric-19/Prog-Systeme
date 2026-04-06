@@ -1,0 +1,579 @@
+
+
+*************************************************************************
+
+----------------------------  CHAPITRE-8 --------------------------------
+
+**********************************************************************
+
+
+_________________________________________________________________________________________
+
+EXO-2
+_________________________________________________________________________________________
+
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+#define PORT 9090
+#define BUFFER_SIZE 256
+
+
+int ip_autorise(const char *ip, char *nom)
+{
+    FILE *f = fopen("add_autoris.txt", "r");
+    if (!f)
+      return 0;
+
+    char ligne[100], ip_f[50], nom_f[50];
+    while (fgets(ligne, sizeof(ligne), f))
+    {
+        if (sscanf(ligne, "%s %s", ip_f, nom_f) == 2)
+        {
+            if (strcmp(ip, ip_f) == 0)
+            {
+                strcpy(nom, nom_f);
+                fclose(f);
+                return 1;
+            }
+        }
+    }
+
+    fclose(f);
+    return 0;
+}
+
+
+int main()
+{
+    int sockfd, newsock;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+    char buffer[BUFFER_SIZE];
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+    {
+        perror("Erreur socket");
+        exit(EXIT_FAILURE);
+    }
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(PORT);
+
+    
+    if (bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
+    {
+        perror("Erreur bind() : ");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+
+    listen(sockfd, 5);
+    printf("Serveur en attente de connexion sur le port %d...\n", PORT);
+
+    while (1)
+    {
+        newsock = accept(sockfd, (struct sockaddr*)&client_addr, &addr_len);
+        if (newsock < 0)
+        {
+            perror("Erreur accept() : ");
+            continue;
+        }
+
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
+
+        char nom[50];
+        if (ip_autorise(client_ip, nom))
+        {
+            sprintf(buffer, "Bienvenue %s !\n", nom);
+        }
+        else
+        {
+            sprintf(buffer, "IP non autorisée.\n");
+        }
+
+        write(newsock, buffer, strlen(buffer));
+        close(newsock);
+    }
+
+    close(sockfd);
+    return 0;
+}
+
+
+
+_________________________________________________________________________________________
+
+EXO-3
+_________________________________________________________________________________________
+
+
+***Client****
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define BUF 1024
+
+int main(int argc, char *argv[])
+{
+    if(argc != 3)
+    {
+        printf("Usage: %s <IP> <fichier>\n", argv[0]);
+        return 1;
+    }
+
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    struct sockaddr_in serv;
+    serv.sin_family = AF_INET;
+    serv.sin_port = htons(54321);
+    inet_pton(AF_INET, argv[1], &serv.sin_addr);
+
+    if(connect(sock, (struct sockaddr*)&serv, sizeof(serv)) < 0)
+    {
+        perror("connect() : ");
+        return 1;
+    }
+
+    FILE *f = fopen(argv[2], "r");
+
+    if(!f)
+    {
+        perror("fopen() : ");
+        return 1;
+    }
+
+    char buf[BUF];
+    int n;
+    while((n = fread(buf, 1, BUF, f)) > 0)
+    {
+        write(sock, buf, n);
+    }
+
+    fclose(f);
+    close(sock);
+
+    printf("Fichier envoye \n");
+    return 0;
+}
+
+
+***Serveurt***
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 54321
+#define BUF 1024
+
+int main()
+{
+    int sockfd, newsock;
+    struct sockaddr_in serv, cli;
+    socklen_t clilen = sizeof(cli);
+    char buf[BUF];
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    serv.sin_family = AF_INET;
+    serv.sin_addr.s_addr = INADDR_ANY;
+    serv.sin_port = htons(PORT);
+
+    bind(sockfd, (struct sockaddr*)&serv, sizeof(serv));
+    listen(sockfd, 5);
+
+    printf("Serveur en attente...\n");
+
+    while(1)
+    {
+        newsock = accept(sockfd, (struct sockaddr*)&cli, &clilen);
+
+        char ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &cli.sin_addr, ip, sizeof(ip));
+
+        time_t t = time(NULL);
+        struct tm *tm = localtime(&t);
+
+        char filename[256];
+        snprintf(filename, sizeof(filename), "/tmp/%s_%04d_%02d_%02d.txt",
+                 ip, tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday);
+
+        FILE *f = fopen(filename, "w");
+
+        if(!f)
+        {
+            perror("fopen");
+            close(newsock);
+            continue;
+        }
+
+        int n;
+        while((n = read(newsock, buf, BUF)) > 0)
+        {
+            fwrite(buf, 1, n, f);
+        }
+
+        fclose(f);
+        close(newsock);
+
+        printf("Fichier recu de %s\n", ip);
+    }
+
+    close(sockfd);
+    return 0;
+}
+
+_________________________________________________________________________________________
+
+EXO-4
+_________________________________________________________________________________________
+
+
+***Client***
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define BUF 4096
+
+int main(int argc, char *argv[])
+{
+    if(argc != 3)
+    {
+        printf("Usage: %s <IP> <repertoire>\n", argv[0]);
+        return 1;
+    }
+
+    char tmpfile[256];
+    snprintf(tmpfile, sizeof(tmpfile), "/tmp/send_archive.tar");
+
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "tar -cf %s -C %s .", tmpfile, argv[2]);
+    if(system(cmd) != 0)
+    {
+        printf("Erreur ceeation archive\n");
+        return 1;
+    }
+
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    struct sockaddr_in serv;
+    serv.sin_family = AF_INET;
+    serv.sin_port = htons(54321);
+    inet_pton(AF_INET, argv[1], &serv.sin_addr);
+
+    if(connect(sock, (struct sockaddr*)&serv, sizeof(serv)) < 0)
+    {
+        perror("connect() : ");
+        return 1;
+    }
+
+    FILE *f = fopen(tmpfile, "rb");
+    if(!f)
+    {
+        perror("fopen() : ");
+        return 1;
+    }
+
+    char buf[BUF];
+    int n;
+    while((n = fread(buf, 1, BUF, f)) > 0)
+    {
+        write(sock, buf, n);
+    }
+
+    fclose(f);
+    close(sock);
+
+    printf("Archive envoye.\n");
+    return 0;
+}
+
+
+***Serveur***
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 54321
+#define BUF 4096
+
+int main()
+{
+    int sockfd, newsock;
+    struct sockaddr_in serv, cli;
+    socklen_t clilen = sizeof(cli);
+    char buf[BUF];
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    serv.sin_family = AF_INET;
+    serv.sin_addr.s_addr = INADDR_ANY;
+    serv.sin_port = htons(PORT);
+
+    bind(sockfd, (struct sockaddr*)&serv, sizeof(serv));
+    listen(sockfd, 5);
+
+    printf("Serveur en attente...\n");
+
+    while(1)
+    {
+        newsock = accept(sockfd, (struct sockaddr*)&cli, &clilen);
+
+        char ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &cli.sin_addr, ip, sizeof(ip));
+
+        time_t t = time(NULL);
+        struct tm *tm = localtime(&t);
+
+        char filename[256];
+        snprintf(filename, sizeof(filename), "/home/save/%s_%04d_%02d_%02d.tar",
+                 ip, tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday);
+
+        FILE *f = fopen(filename, "wb");
+
+        if(!f)
+        {
+            perror("fopen");
+            close(newsock);
+            continue;
+        }
+
+        int n;
+        while((n = read(newsock, buf, BUF)) > 0)
+        {
+            fwrite(buf, 1, n, f);
+        }
+
+        fclose(f);
+        close(newsock);
+
+        printf("Archive reçue de %s\n", ip);
+    }
+
+    close(sockfd);
+    return 0;
+}
+
+_________________________________________________________________________________________
+
+EXO-5
+_________________________________________________________________________________________
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+
+#define PORT 12345
+#define BUF 256
+#define TRUE 1
+
+int main()
+{
+    int serv, cli[2], n;
+    struct sockaddr_in addr;
+    char buffer[BUF];
+
+    serv = socket(AF_INET, SOCK_STREAM, 0);
+    if(serv < 0){ perror("socket"); exit(1); }
+
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(PORT);
+
+    if(bind(serv, (struct sockaddr*)&addr, sizeof(addr)) < 0){ perror("bind"); exit(1); }
+    listen(serv, 2);
+
+    printf("Attente de 2 clients...\n");
+    cli[0] = accept(serv, NULL, NULL);
+    cli[1] = accept(serv, NULL, NULL);
+    printf("2 clients connectés.\n");
+
+    while(TRUE)
+    {
+        memset(buffer, 0, BUF);
+        send(cli[0], "Saisissez la phrase : ", 23, 0);
+        n = recv(cli[0], buffer, BUF, 0);
+        if(n <= 0) break;
+        send(cli[1], "L'autre client dit : ", 21, 0);
+        send(cli[1], buffer, n, 0);
+
+        memset(buffer, 0, BUF);
+        send(cli[1], "Saisissez la phrase : ", 23, 0);
+        n = recv(cli[1], buffer, BUF, 0);
+        if(n <= 0) break;
+        send(cli[0], "L'autre client dit : ", 21, 0);
+        send(cli[0], buffer, n, 0);
+    }
+
+    close(cli[0]);
+    close(cli[1]);
+    close(serv);
+    return 0;
+}
+
+
+
+_________________________________________________________________________________________
+
+EXO-6
+_________________________________________________________________________________________
+
+
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+
+#define PORT 54322
+#define MAX 10
+#define BUF 256
+
+int clients[MAX];
+int count = 0;
+int can_speak = -1;
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void broadcast(char *msg, int sender)
+{
+    for(int i = 0; i < count; i++)
+    {
+        if(i != sender)
+        {
+            send(clients[i], msg, strlen(msg), 0);
+        }
+    }
+}
+
+void *handle(void *arg)
+{
+    int idx = *(int*)arg;
+    free(arg);
+
+    char buf[BUF];
+    char ip[INET_ADDRSTRLEN];
+    struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
+
+    getpeername(clients[idx], (struct sockaddr*)&addr, &len);
+    inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
+
+    while(1)
+    {
+
+        int n = recv(clients[idx], buf, BUF-1, 0);
+        if(n <= 0)
+        {
+            break;
+        }
+        buf[n] = 0;
+          
+        pthread_mutex_lock(&lock);
+
+        if(can_speak == -1)
+        {
+            can_speak = idx;
+        }
+
+        if(can_speak == idx)
+        {
+            char msg[BUF + 50];
+            sprintf(msg, "%s: %s", ip, buf);
+            broadcast(msg, idx);
+            can_speak = -1;
+        }
+
+        pthread_mutex_unlock(&lock);
+    }
+
+    close(clients[idx]);
+    return NULL;
+}
+
+int main()
+{
+    int sock;
+    int s;
+    struct sockaddr_in server;
+    struct sockaddr_in client;
+    socklen_t clilen = sizeof(client);
+    pthread_t tid;
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(PORT);
+
+    if(bind(sock, (struct sockaddr*)&server, sizeof(server)) < 0)
+    {
+        perror("bind() : ");
+        exit(1);
+    }
+
+    listen(sock, MAX);
+    printf("Serveur en ecoute sur le port %d\n", PORT);
+
+    while(1)
+    {
+        s = accept(sock, (struct sockaddr*)&client, &clilen);
+        if(s < 0)
+        {
+            perror("accept");
+            continue;
+        }
+
+        pthread_mutex_lock(&lock);
+
+        clients[count] = s;
+        int *pidx = malloc(sizeof(int));
+        *pidx = count++;
+        
+        pthread_mutex_unlock(&lock);
+
+        pthread_create(&tid, NULL, handle, pidx);
+        pthread_detach(tid);
+    }
+
+    close(sock);
+    return 0;
+}
+
+
+
+*****************************************************************************
